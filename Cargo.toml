@@ -1,0 +1,8 @@
+[package]
+name = "final_project"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+smartcore = "0.3.2" # Machine learning library
+csv = "1.1.6"       # CSV parsing library
