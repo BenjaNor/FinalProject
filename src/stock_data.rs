@@ -19,89 +19,86 @@ pub struct StockData {
     pub change_in_roa: Option<f64>,           // Change in ROA over the previous year
 }
 
+pub fn read_csv(file_path: &str) -> Result<HashMap<String, HashMap<u32, f64>>, Box<dyn Error>> {
+    let mut reader = ReaderBuilder::new().from_path(file_path)?;
+    let mut data: HashMap<String, HashMap<u32, f64>> = HashMap::new();
+
+    for result in reader.records() {
+        let record = result?;
+        let ticker = record.get(0).unwrap_or("").to_string();
+        if ticker.is_empty() {
+            continue;
+        }
+        let mut years = HashMap::new();
+        for (i, value) in record.iter().skip(1).enumerate() {
+            let year = 2022 - i as u32;
+            let value: f64 = value.parse().unwrap_or(0.0);
+            years.insert(year, value);
+        }
+        data.insert(ticker, years);
+    }
+    Ok(data)
+}
+
+pub fn calculate_price_changes(file_path: &str) -> Result<HashMap<String, HashMap<u32, f64>>, Box<dyn Error>> {
+    let mut reader = ReaderBuilder::new().from_path(file_path)?;
+    let headers = reader.headers()?.clone();
+    let mut data: HashMap<String, HashMap<u32, Vec<(u32, f64)>>> = HashMap::new();
+
+    for result in reader.records() {
+        let record = result?;
+        let date = record.get(1).unwrap_or("");
+        if date.len() < 7 {
+            continue;
+        }
+
+        let year: u32 = date[..4].parse().unwrap_or(0);
+        let month: u32 = date[5..7].parse().unwrap_or(0);
+
+        for (i, header) in headers.iter().enumerate().skip(2) {
+            let ticker = header.to_string();
+            let price: f64 = record.get(i).unwrap_or("0").parse().unwrap_or(0.0);
+
+            data.entry(ticker.clone())
+                .or_insert_with(HashMap::new)
+                .entry(year)
+                .or_insert_with(Vec::new)
+                .push((month, price));
+        }
+    }
+
+    let mut price_changes: HashMap<String, HashMap<u32, f64>> = HashMap::new();
+
+    for (ticker, years) in &data {
+        let mut changes = HashMap::new();
+        for (year, prices) in years {
+            let mut first_month_prices = Vec::new();
+            let mut last_month_prices = Vec::new();
+
+            for &(month, price) in prices {
+                if month <= 2 {
+                    first_month_prices.push(price);
+                } else if month >= 11 {
+                    last_month_prices.push(price);
+                }
+            }
+
+            if !first_month_prices.is_empty() && !last_month_prices.is_empty() {
+                let first_avg: f64 = first_month_prices.iter().sum::<f64>() / first_month_prices.len() as f64;
+                let last_avg: f64 = last_month_prices.iter().sum::<f64>() / last_month_prices.len() as f64;
+                let percent_change = ((last_avg - first_avg) / first_avg) * 100.0;
+                changes.insert(*year, percent_change);
+            }
+        }
+        price_changes.insert(ticker.clone(), changes);
+    }
+    Ok(price_changes)
+}
+
 pub fn process_stock_data(
     financial_files: &[(&str, &str)],
     price_file: &str,
 ) -> Result<HashMap<String, Vec<StockData>>, Box<dyn Error>> {
-
-    fn read_csv(file_path: &str) -> Result<HashMap<String, HashMap<u32, f64>>, Box<dyn Error>> {
-        let mut reader = ReaderBuilder::new().from_path(file_path)?;
-        let mut data: HashMap<String, HashMap<u32, f64>> = HashMap::new();
-
-        for result in reader.records() {
-            let record = result?;
-            let ticker = record.get(0).unwrap_or("").to_string();
-            if ticker.is_empty() {
-                continue;
-            }
-            let mut years = HashMap::new();
-            for (i, value) in record.iter().skip(1).enumerate() {
-                let year = 2022 - i as u32;
-                let value: f64 = value.parse().unwrap_or(0.0);
-                years.insert(year, value);
-            }
-            data.insert(ticker, years);
-        }
-        Ok(data)
-    }
-
-
-    fn calculate_price_changes(file_path: &str) -> Result<HashMap<String, HashMap<u32, f64>>, Box<dyn Error>> {
-        let mut reader = ReaderBuilder::new().from_path(file_path)?;
-        let headers = reader.headers()?.clone();
-        let mut data: HashMap<String, HashMap<u32, Vec<(u32, f64)>>> = HashMap::new();
-
-        for result in reader.records() {
-            let record = result?;
-            let date = record.get(1).unwrap_or("");
-            if date.len() < 7 {
-                continue;
-            }
-
-            let year: u32 = date[..4].parse().unwrap_or(0);
-            let month: u32 = date[5..7].parse().unwrap_or(0);
-
-            for (i, header) in headers.iter().enumerate().skip(2) {
-                let ticker = header.to_string();
-                let price: f64 = record.get(i).unwrap_or("0").parse().unwrap_or(0.0);
-
-                data.entry(ticker.clone())
-                    .or_insert_with(HashMap::new)
-                    .entry(year)
-                    .or_insert_with(Vec::new)
-                    .push((month, price));
-            }
-        }
-
-        let mut price_changes: HashMap<String, HashMap<u32, f64>> = HashMap::new();
-
-        for (ticker, years) in &data {
-            let mut changes = HashMap::new();
-            for (year, prices) in years {
-                let mut first_month_prices = Vec::new();
-                let mut last_month_prices = Vec::new();
-
-                for &(month, price) in prices {
-                    if month <= 2 {
-                        first_month_prices.push(price);
-                    } else if month >= 11 {
-                        last_month_prices.push(price);
-                    }
-                }
-
-                if !first_month_prices.is_empty() && !last_month_prices.is_empty() {
-                    let first_avg: f64 = first_month_prices.iter().sum::<f64>() / first_month_prices.len() as f64;
-                    let last_avg: f64 = last_month_prices.iter().sum::<f64>() / last_month_prices.len() as f64;
-                    let percent_change = ((last_avg - first_avg) / first_avg) * 100.0;
-                    changes.insert(*year, percent_change);
-                }
-            }
-            price_changes.insert(ticker.clone(), changes);
-        }
-        Ok(price_changes)
-    }
-
-
     let price_changes = calculate_price_changes(price_file)?;
     let assets = read_csv(financial_files[0].0)?;
     let cash = read_csv(financial_files[1].0)?;
@@ -109,7 +106,6 @@ pub fn process_stock_data(
     let profit = read_csv(financial_files[3].0)?;
     let revenue = read_csv(financial_files[4].0)?;
 
-    // Combine datasets
     let mut combined_data: HashMap<String, Vec<StockData>> = HashMap::new();
 
     for (ticker, years) in &assets {

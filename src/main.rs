@@ -1,10 +1,9 @@
 mod stock_data;
-
 use smartcore::linalg::basic::matrix::DenseMatrix;
 use smartcore::metrics::accuracy;
 use smartcore::model_selection::train_test_split;
 use smartcore::ensemble::random_forest_classifier::{RandomForestClassifier, RandomForestClassifierParameters};
-use stock_data::process_stock_data;
+use stock_data::{process_stock_data, StockData};
 
 fn prepare_dataset(
     stock_data: &std::collections::HashMap<String, Vec<stock_data::StockData>>,
@@ -114,60 +113,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-#[test]
-fn test_categorize_price_change() {
-    assert_eq!(categorize_price_change(-60.0), 0); 
-    assert_eq!(categorize_price_change(-30.0), 1);
-    assert_eq!(categorize_price_change(10.0), 2);  
-    assert_eq!(categorize_price_change(70.0), 3); 
-}
+mod tests {
+    use super::*;
+    use stock_data::{read_csv, calculate_price_changes};
 
-#[cfg(test)]
-use super::*;
-#[test]
-    fn test_change_calculations() {
-        let mut stock_data = std::collections::HashMap::new();
-        stock_data.insert(
-            "FAKE".to_string(),
-            vec![
-                StockData {
-                    ticker: "FAKE".to_string(),
-                    year: 2021,
-                    assets: 100.0,       
-                    cash: 50.0,
-                    equity: 30.0,
-                    profit: 20.0,
-                    revenue: 100.0,
-                    price_change: 0.0,
-                    profit_margin: 0.2,  // 20 / 100
-                    roa: 0.2,            // (0.2 * 100) / 100
-                    change_in_revenue: None,
-                    change_in_profit_margin: None,
-                    change_in_roa: None,
-                },
-                StockData {
-                    ticker: "FAKE".to_string(),
-                    year: 2022,
-                    assets: 200.0,
-                    cash: 100.0,
-                    equity: 60.0,
-                    profit: 50.0,
-                    revenue: 200.0,
-                    price_change: 0.0,
-                    profit_margin: 0.25, // 50 / 200
-                    roa: 0.25,           // (0.25 * 200) / 200
-                    change_in_revenue: None,
-                    change_in_profit_margin: None,
-                    change_in_roa: None,
-                },
-            ],
-        );
+    #[test]
+    fn test_categorize_price_change() {
+        assert_eq!(categorize_price_change(-60.0), 0); 
+        assert_eq!(categorize_price_change(-30.0), 1);
+        assert_eq!(categorize_price_change(10.0), 2);  
+        assert_eq!(categorize_price_change(70.0), 3); 
+    }
 
-        let (features, _) = prepare_dataset(&stock_data);
+    #[test]
+    fn test_csv_readers_with_mock_files() {
+        let assets_file = "assets_mock.csv";
+        let cash_file = "cash_mock.csv";
+        let prices_file = "prices_mock.csv";
 
-        let row = features.get_row(0).unwrap();
-        assert_eq!(row[0], 100.0); 
-        assert_eq!(row[1], 0.05);  
-        assert_eq!(row[2], 0.05); 
+        let assets = read_csv(assets_file).unwrap();
+        assert!(assets.contains_key("TEST"));
+        assert_eq!(assets["TEST"][&2022], 200.0);
+        assert_eq!(assets["TEST"][&2021], 100.0);
+
+        let cash = read_csv(cash_file).unwrap();
+        assert!(cash.contains_key("TEST"));
+        assert_eq!(cash["TEST"][&2022], 100.0);
+        assert_eq!(cash["TEST"][&2021], 50.0);
+
+        let price_changes = calculate_price_changes(prices_file).unwrap();
+        assert!(price_changes.contains_key("TEST"));
+        assert_eq!(price_changes["TEST"][&2022], 100.0);
     }
 }
