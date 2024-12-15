@@ -17,7 +17,6 @@ fn prepare_dataset(
             let current = &records[i];
             let previous = &records[i - 1];
 
-            // Skip the first year for each stock and records with missing data
             if i == 1
                 || previous.change_in_revenue.is_none()
                 || previous.change_in_profit_margin.is_none()
@@ -26,7 +25,6 @@ fn prepare_dataset(
                 continue;
             }
 
-            // Calculate changes
             let delta_revenue = current.change_in_revenue.unwrap();
             let delta_profit_margin = current.change_in_profit_margin.unwrap();
             let delta_roa = current.change_in_roa.unwrap();
@@ -118,8 +116,58 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 #[test]
 fn test_categorize_price_change() {
-    assert_eq!(categorize_price_change(-60.0), 0); // Below -50%
-    assert_eq!(categorize_price_change(-30.0), 1); // Between -50% and 0%
-    assert_eq!(categorize_price_change(10.0), 2);  // Between 0% and 50%
-    assert_eq!(categorize_price_change(70.0), 3);  // Above 50%
+    assert_eq!(categorize_price_change(-60.0), 0); 
+    assert_eq!(categorize_price_change(-30.0), 1);
+    assert_eq!(categorize_price_change(10.0), 2);  
+    assert_eq!(categorize_price_change(70.0), 3); 
+}
+
+#[cfg(test)]
+use super::*;
+#[test]
+    fn test_change_calculations() {
+        let mut stock_data = std::collections::HashMap::new();
+        stock_data.insert(
+            "FAKE".to_string(),
+            vec![
+                StockData {
+                    ticker: "FAKE".to_string(),
+                    year: 2021,
+                    assets: 100.0,       
+                    cash: 50.0,
+                    equity: 30.0,
+                    profit: 20.0,
+                    revenue: 100.0,
+                    price_change: 0.0,
+                    profit_margin: 0.2,  // 20 / 100
+                    roa: 0.2,            // (0.2 * 100) / 100
+                    change_in_revenue: None,
+                    change_in_profit_margin: None,
+                    change_in_roa: None,
+                },
+                StockData {
+                    ticker: "FAKE".to_string(),
+                    year: 2022,
+                    assets: 200.0,
+                    cash: 100.0,
+                    equity: 60.0,
+                    profit: 50.0,
+                    revenue: 200.0,
+                    price_change: 0.0,
+                    profit_margin: 0.25, // 50 / 200
+                    roa: 0.25,           // (0.25 * 200) / 200
+                    change_in_revenue: None,
+                    change_in_profit_margin: None,
+                    change_in_roa: None,
+                },
+            ],
+        );
+
+        let (features, _) = prepare_dataset(&stock_data);
+
+        let row = features.get_row(0).unwrap();
+        assert_eq!(row[0], 100.0); 
+        assert_eq!(row[1], 0.05);  
+        assert_eq!(row[2], 0.05); 
+    }
 }
